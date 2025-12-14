@@ -1,0 +1,2 @@
+Implement the synchronous FIFO in `sources/fifo_sync.sv` to satisfy the behavior described in `docs/Specification.md`. The design uses active-LOW asynchronous reset, supports simultaneous read and write, and must drive `full`, `empty`, `count`, and `rd_valid` correctly. Use the provided parameters `WIDTH` (default 8) and `DEPTH` (default 16). Tests are hidden and will exercise reset, basic read/write, overflow handling, and simultaneous read/write cases.
+
