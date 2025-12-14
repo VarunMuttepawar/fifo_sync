@@ -4,7 +4,7 @@ module fifo_sync #(
     parameter int DEPTH = 16
 ) (
     input  wire                 clk,
-    input  wire                 reset,     // active-LOW async reset
+    input  wire                 reset,
     input  wire                 wr_en,
     input  wire                 rd_en,
     input  wire [WIDTH-1:0]     wr_data,
@@ -15,66 +15,45 @@ module fifo_sync #(
     output reg                  rd_valid
 );
 
-    // ------------------------------------------------------------------
-    // Internal storage
-    // ------------------------------------------------------------------
-    reg [WIDTH-1:0] mem [0:DEPTH-1];
+    // FIFO memory
+    reg [WIDTH-1:0] fifo_mem [DEPTH-1:0];
 
-    localparam int PTR_W = $clog2(DEPTH);
-
-    reg [PTR_W-1:0] wr_ptr;
-    reg [PTR_W-1:0] rd_ptr;
+    // Pointers
+    reg [$clog2(DEPTH)-1:0] wr_ptr;
+    reg [$clog2(DEPTH)-1:0] rd_ptr;
     reg [$clog2(DEPTH+1)-1:0] fifo_count;
 
-    // ------------------------------------------------------------------
-    // Status outputs
-    // ------------------------------------------------------------------
-    assign full  = (fifo_count == DEPTH);
+    // Status flags
+    assign full = (fifo_count == DEPTH);
     assign empty = (fifo_count == 0);
     assign count = fifo_count;
 
-    // ------------------------------------------------------------------
-    // Sequential logic
-    // ------------------------------------------------------------------
+    // Reset logic
     always @(posedge clk or negedge reset) begin
         if (!reset) begin
-            wr_ptr     <= '0;
-            rd_ptr     <= '0;
-            fifo_count <= '0;
-            rd_data    <= '0;
-            rd_valid   <= 1'b0;
+            wr_ptr <= 0;
+            rd_ptr <= 0;
+            fifo_count <= 0;
+            rd_data <= 0;
+            rd_valid <= 0;
         end else begin
-            rd_valid <= 1'b0;
-
-            // -------------------------------
-            // Simultaneous read & write
-            // -------------------------------
-            if (wr_en && !full && rd_en && !empty) begin
-                mem[wr_ptr] <= wr_data;
-                rd_data     <= mem[rd_ptr];
-                wr_ptr      <= wr_ptr + 1'b1;
-                rd_ptr      <= rd_ptr + 1'b1;
-                rd_valid    <= 1'b1;
-                // fifo_count unchanged
+            // Write operation
+            if (wr_en && !full) begin
+                fifo_mem[wr_ptr] <= wr_data;
+                wr_ptr <= (wr_ptr + 1) % DEPTH;
+                fifo_count <= fifo_count + 1;
             end
 
-            // -------------------------------
-            // Write only
-            // -------------------------------
-            else if (wr_en && !full) begin
-                mem[wr_ptr] <= wr_data;
-                wr_ptr      <= wr_ptr + 1'b1;
-                fifo_count  <= fifo_count + 1'b1;
-            end
-
-            // -------------------------------
-            // Read only
-            // -------------------------------
-            else if (rd_en && !empty) begin
-                rd_data     <= mem[rd_ptr];
-                rd_ptr      <= rd_ptr + 1'b1;
-                fifo_count  <= fifo_count - 1'b1;
-                rd_valid    <= 1'b1;
+            // Read operation
+            if (rd_en && !empty) begin
+                rd_data <= fifo_mem[rd_ptr];
+                rd_ptr <= (rd_ptr + 1) % DEPTH;
+                fifo_count <= fifo_count - 1;
+                rd_valid <= 1;
+            end else if (rd_en && empty) begin
+                rd_valid <= 0;
+            end else begin
+                rd_valid <= 0;
             end
         end
     end
