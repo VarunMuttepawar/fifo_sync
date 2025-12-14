@@ -103,6 +103,7 @@ async def test_full_and_overflow_behavior(dut):
     await RisingEdge(dut.clk)
     dut.rd_en.value = 0
 
+    await Timer(1, "ns")
     assert int(dut.full.value) == 0
     assert int(dut.count.value) == DEPTH - 1
 
@@ -135,6 +136,7 @@ async def test_simultaneous_read_write(dut):
         dut.rd_en.value = 1
         await RisingEdge(dut.clk)
 
+        await Timer(1, "ns")
         if int(dut.rd_valid.value):
             read_vals.append(int(dut.rd_data.value))
 
