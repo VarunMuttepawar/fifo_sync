@@ -52,7 +52,7 @@ async def test_write_read_basic(dut):
         dut.wr_en.value = 1
         await RisingEdge(dut.clk)
         dut.wr_en.value = 0
-
+    await Timer(1, "ns")
     assert int(dut.full.value) == 1
     assert int(dut.count.value) == DEPTH
 
@@ -67,6 +67,7 @@ async def test_write_read_basic(dut):
 
         dut.rd_en.value = 0
 
+    await Timer(1, "ns")
     assert collected == list(range(DEPTH)), f"Got {collected}"
 
 @cocotb.test()
@@ -83,6 +84,7 @@ async def test_full_and_overflow_behavior(dut):
         await RisingEdge(dut.clk)
         dut.wr_en.value = 0
 
+    await Timer(1, "ns")
     assert int(dut.full.value) == 1
     assert int(dut.count.value) == DEPTH
 
@@ -92,6 +94,7 @@ async def test_full_and_overflow_behavior(dut):
     await RisingEdge(dut.clk)
     dut.wr_en.value = 0
 
+    await Timer(1, "ns")
     assert int(dut.count.value) == DEPTH
 
     # One read
@@ -108,6 +111,7 @@ async def test_full_and_overflow_behavior(dut):
     await RisingEdge(dut.clk)
     dut.wr_en.value = 0
 
+    await Timer(1, "ns")
     assert int(dut.count.value) == DEPTH
 
 @cocotb.test()
