@@ -61,7 +61,8 @@ async def test_write_read_basic(dut):
     for _ in range(DEPTH):
         dut.rd_en.value = 1
         await RisingEdge(dut.clk)
-
+        await Timer(1, "ns")
+        
         if int(dut.rd_valid.value):
             collected.append(int(dut.rd_data.value))
 
