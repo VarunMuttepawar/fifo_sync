@@ -4,6 +4,7 @@ from cocotb.clock import Clock
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from cocotb_test.simulator import run
 
 # Enable waveform dumping (do not override externally-set value)
 os.environ.setdefault("WAVES", "1")
@@ -12,15 +13,9 @@ os.environ.setdefault("WAVES", "1")
 # Clock + Reset helpers
 # -----------------------------------------------------------------------------
 
-_clock_started = False
-
 async def generate_clock(dut, period_ns=10):
-    """Start the clock only once (important!)."""
-    global _clock_started
-    if _clock_started:
-        return
-    _clock_started = True
-    clk = Clock(dut.clk, period_ns, units="ns")
+    """Start the clock for this test."""
+    clk = Clock(dut.clk, period_ns, unit="ns")
     cocotb.start_soon(clk.start())
 
 async def reset_dut(dut):
@@ -52,8 +47,8 @@ async def test_write_read_basic(dut):
         dut.wr_en.value = 1
         await RisingEdge(dut.clk)
         dut.wr_en.value = 0
-    await RisingEdge(dut.clk)
-    await Timer(1, "ns")
+
+    await Timer(1, unit="ps")
     assert int(dut.full.value) == 1
     assert int(dut.count.value) == DEPTH
 
@@ -62,14 +57,13 @@ async def test_write_read_basic(dut):
     for _ in range(DEPTH):
         dut.rd_en.value = 1
         await RisingEdge(dut.clk)
-        await Timer(1, "ns")
-        
+        await Timer(1, unit="ps")
+
         if int(dut.rd_valid.value):
             collected.append(int(dut.rd_data.value))
 
         dut.rd_en.value = 0
 
-    await Timer(1, "ns")
     assert collected == list(range(DEPTH)), f"Got {collected}"
 
 @cocotb.test()
@@ -81,13 +75,13 @@ async def test_full_and_overflow_behavior(dut):
 
     # Fill FIFO
     for i in range(DEPTH):
-        dut.wr_data.value = (i + 10) & 0xFF
+        dut.wr_data.value = i
         dut.wr_en.value = 1
         await RisingEdge(dut.clk)
         dut.wr_en.value = 0
 
-    await RisingEdge(dut.clk)
-    await Timer(1, "ns")
+    await Timer(1, unit="ps")
+    dut._log.info(f"After fill: full={int(dut.full.value)} count={int(dut.count.value)}")
     assert int(dut.full.value) == 1
     assert int(dut.count.value) == DEPTH
 
@@ -96,18 +90,18 @@ async def test_full_and_overflow_behavior(dut):
     dut.wr_en.value = 1
     await RisingEdge(dut.clk)
     dut.wr_en.value = 0
+    await Timer(1, unit="ps")
 
-    await RisingEdge(dut.clk)
-    await Timer(1, "ns")
+    dut._log.info(f"After overflow attempt: count={int(dut.count.value)} full={int(dut.full.value)}")
     assert int(dut.count.value) == DEPTH
 
     # One read
     dut.rd_en.value = 1
     await RisingEdge(dut.clk)
+    await Timer(1, unit="ps")
     dut.rd_en.value = 0
-
     await RisingEdge(dut.clk)
-    await Timer(1, "ns")
+    dut._log.info(f"After one read: full={int(dut.full.value)} count={int(dut.count.value)}")
     assert int(dut.full.value) == 0
     assert int(dut.count.value) == DEPTH - 1
 
@@ -116,9 +110,9 @@ async def test_full_and_overflow_behavior(dut):
     dut.wr_en.value = 1
     await RisingEdge(dut.clk)
     dut.wr_en.value = 0
-
+    await Timer(1, unit="ps")
     await RisingEdge(dut.clk)
-    await Timer(1, "ns")
+    dut._log.info(f"After refill: count={int(dut.count.value)} full={int(dut.full.value)}")
     assert int(dut.count.value) == DEPTH
 
 @cocotb.test()
@@ -140,14 +134,15 @@ async def test_simultaneous_read_write(dut):
         dut.wr_en.value = 1
         dut.rd_en.value = 1
         await RisingEdge(dut.clk)
+        await Timer(1, unit="ps")
 
-        await Timer(1, "ns")
         if int(dut.rd_valid.value):
             read_vals.append(int(dut.rd_data.value))
 
         dut.wr_en.value = 0
         dut.rd_en.value = 0
 
+    dut._log.info(f"Simultaneous read values: {read_vals}")
     assert read_vals == [10, 11, 12, 13], f"Got {read_vals}"
 
 # -----------------------------------------------------------------------------
@@ -176,12 +171,8 @@ def _count_failures_errors(results_xml: Path) -> tuple[int, int]:
 # -----------------------------------------------------------------------------
 
 def test_fifo_hidden_runner():
-    from cocotb_tools.runner import get_runner
-
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
-
-    sources = [proj_path / "sources" / "fifo_sync.sv"]
 
     results_xml = proj_path / "sim_build" / "results.xml"
     results_xml.parent.mkdir(parents=True, exist_ok=True)
@@ -189,12 +180,13 @@ def test_fifo_hidden_runner():
 
     os.environ["COCOTB_RESULTS_FILE"] = str(results_xml)
 
-    runner = get_runner(sim)
-    runner.build(sources=sources, hdl_toplevel="fifo_sync", always=True)
-    runner.test(
-        hdl_toplevel="fifo_sync",
-        test_module="test_fifo_hidden",
+    run(
+        verilog_sources=[str(proj_path / "sources" / "fifo_sync.sv")],
+        toplevel="fifo_sync",
+        module="test_fifo_hidden",
+        sim=sim,
         waves=True,
+        workdir=str(proj_path / "sim_build"),
     )
 
     assert results_xml.exists(), "Missing cocotb results.xml"
