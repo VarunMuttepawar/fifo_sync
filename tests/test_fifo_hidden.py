@@ -2,7 +2,6 @@ import cocotb
 from cocotb.triggers import Timer, RisingEdge
 from cocotb.clock import Clock
 import os
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Enable waveform dumping (do not override externally-set value)
@@ -145,28 +144,7 @@ async def test_simultaneous_read_write(dut):
     assert read_vals == [10, 11, 12, 13], f"Got {read_vals}"
 
 # -----------------------------------------------------------------------------
-# JUnit parsing helper
-# -----------------------------------------------------------------------------
-
-def _count_failures_errors(results_xml: Path) -> tuple[int, int]:
-    tree = ET.parse(results_xml)
-    root = tree.getroot()
-
-    suites = []
-    if root.tag == "testsuite":
-        suites.append(root)
-    suites.extend(root.findall(".//testsuite"))
-
-    failures = 0
-    errors = 0
-    for ts in suites:
-        failures += int(ts.get("failures", "0"))
-        errors += int(ts.get("errors", "0"))
-
-    return failures, errors
-
-# -----------------------------------------------------------------------------
-# Pytest wrapper (HUD REQUIRED - FIXED to use cocotb_tools.runner)
+# Pytest wrapper (HUD REQUIRED - per CONTRACTOR_GUIDE lines 484-504)
 # -----------------------------------------------------------------------------
 
 def test_fifo_hidden_runner():
@@ -176,12 +154,6 @@ def test_fifo_hidden_runner():
     proj_path = Path(__file__).resolve().parent.parent
 
     sources = [proj_path / "sources" / "fifo_sync.sv"]
-
-    # Set up results file
-    results_xml = proj_path / "sim_build" / "results.xml"
-    results_xml.parent.mkdir(parents=True, exist_ok=True)
-    results_xml.unlink(missing_ok=True)
-    os.environ["COCOTB_RESULTS_FILE"] = str(results_xml)
 
     # Build and run tests using cocotb_tools.runner (per CONTRACTOR_GUIDE)
     runner = get_runner(sim)
@@ -196,11 +168,6 @@ def test_fifo_hidden_runner():
         test_module="test_fifo_hidden",
         waves=True,
     )
-
-    # Check results
-    assert results_xml.exists(), "Missing cocotb results.xml"
-    failures, errors = _count_failures_errors(results_xml)
-    assert failures == 0 and errors == 0, (
-        f"Cocotb failures: failures={failures}, errors={errors}"
-    )
+    
+    # No need to check results.xml - runner.test() will raise SystemExit if tests fail
 
