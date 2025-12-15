@@ -4,7 +4,6 @@ from cocotb.clock import Clock
 import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from cocotb_test.simulator import run
 
 # Enable waveform dumping (do not override externally-set value)
 os.environ.setdefault("WAVES", "1")
@@ -167,30 +166,41 @@ def _count_failures_errors(results_xml: Path) -> tuple[int, int]:
     return failures, errors
 
 # -----------------------------------------------------------------------------
-# Pytest wrapper (HUD REQUIRED)
+# Pytest wrapper (HUD REQUIRED - FIXED to use cocotb_tools.runner)
 # -----------------------------------------------------------------------------
 
 def test_fifo_hidden_runner():
+    from cocotb_tools.runner import get_runner
+    
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent
 
+    sources = [proj_path / "sources" / "fifo_sync.sv"]
+
+    # Set up results file
     results_xml = proj_path / "sim_build" / "results.xml"
     results_xml.parent.mkdir(parents=True, exist_ok=True)
     results_xml.unlink(missing_ok=True)
-
     os.environ["COCOTB_RESULTS_FILE"] = str(results_xml)
 
-    run(
-        verilog_sources=[str(proj_path / "sources" / "fifo_sync.sv")],
-        toplevel="fifo_sync",
-        module="test_fifo_hidden",
-        sim=sim,
+    # Build and run tests using cocotb_tools.runner (per CONTRACTOR_GUIDE)
+    runner = get_runner(sim)
+    runner.build(
+        sources=sources,
+        hdl_toplevel="fifo_sync",
+        always=True,
+    )
+    
+    runner.test(
+        hdl_toplevel="fifo_sync",
+        test_module="test_fifo_hidden",
         waves=True,
-        workdir=str(proj_path / "sim_build"),
     )
 
+    # Check results
     assert results_xml.exists(), "Missing cocotb results.xml"
     failures, errors = _count_failures_errors(results_xml)
     assert failures == 0 and errors == 0, (
         f"Cocotb failures: failures={failures}, errors={errors}"
     )
+
