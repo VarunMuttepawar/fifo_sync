@@ -28,7 +28,7 @@ module fifo_sync #(
     assign empty = (fifo_count == 0);
     assign count = fifo_count;
 
-    // Reset logic
+    // Reset and operation logic
     always @(posedge clk or negedge reset) begin
         if (!reset) begin
             wr_ptr <= 0;
@@ -37,23 +37,29 @@ module fifo_sync #(
             rd_data <= 0;
             rd_valid <= 0;
         end else begin
-            // Write operation
-            if (wr_en && !full) begin
+            // Default: clear rd_valid
+            rd_valid <= 0;
+            
+            // Handle simultaneous read and write
+            if (wr_en && !full && rd_en && !empty) begin
+                // Both operations happen, count stays the same
+                fifo_mem[wr_ptr] <= wr_data;
+                wr_ptr <= (wr_ptr + 1) % DEPTH;
+                rd_data <= fifo_mem[rd_ptr];
+                rd_ptr <= (rd_ptr + 1) % DEPTH;
+                rd_valid <= 1;
+                // fifo_count stays the same (no update)
+            end else if (wr_en && !full) begin
+                // Write only
                 fifo_mem[wr_ptr] <= wr_data;
                 wr_ptr <= (wr_ptr + 1) % DEPTH;
                 fifo_count <= fifo_count + 1;
-            end
-
-            // Read operation
-            if (rd_en && !empty) begin
+            end else if (rd_en && !empty) begin
+                // Read only
                 rd_data <= fifo_mem[rd_ptr];
                 rd_ptr <= (rd_ptr + 1) % DEPTH;
                 fifo_count <= fifo_count - 1;
                 rd_valid <= 1;
-            end else if (rd_en && empty) begin
-                rd_valid <= 0;
-            end else begin
-                rd_valid <= 0;
             end
         end
     end
